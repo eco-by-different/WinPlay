@@ -7,6 +7,12 @@ WinPlay is a tiny and minimalist media player built exclusively for Windows.
 
 It uses the native Windows multimedia components, so no FFmpeg, external codecs, libraries, or installation are required.
 
+## Antivirus Notice (False Positives)
+
+The `.exe` binary is generated, which some sensitive antivirus engines, including Windows Defender or machine-learning based scanners, may flag as a false positive.
+
+The underlying PowerShell script is clean.If your system blocks the `.exe`, you can safely run the raw `WinPlay.ps1` script instead.
+
 ## Screenshot
 
 ![WinPlay 1.0](WinPlay.png)
