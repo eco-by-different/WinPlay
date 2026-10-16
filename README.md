@@ -9,7 +9,7 @@ It uses the native Windows multimedia components, so no FFmpeg, external codecs,
 
 ## Screenshot
 
-![WinPlay 1.0](Winplay.png)
+![WinPlay 1.0](WinPlay.png)
 
 ## Features
 
