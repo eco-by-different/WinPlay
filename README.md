@@ -1,8 +1,15 @@
+![Repo size](https://img.shields.io/github/repo-size/eco-by-different/winplay)
+![Last commit](https://img.shields.io/github/last-commit/eco-by-different/winplay)
+
 # WinPlay
 
 WinPlay is a tiny and minimalist media player built exclusively for Windows.
 
 It uses the native Windows multimedia components, so no FFmpeg, external codecs, libraries, or installation are required.
+
+## Screenshot
+
+![WinPlay 1.0](winplay.png)
 
 ## Features
 
