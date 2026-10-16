@@ -99,7 +99,7 @@ Add-Type -TypeDefinition $native -Language CSharp
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="CurrentTime" Text="00:00" VerticalAlignment="Center"/>
             <Slider x:Name="Timeline" Grid.Column="1" Minimum="0" Maximum="1"
-                    Value="0" Margin="8,0" IsMoveToPointEnabled="True"/>
+                    Value="0" Margin="8,0" IsMoveToPointEnabled="True" Focusable="False"/>
             <TextBlock x:Name="TotalTime" Grid.Column="2" Text="00:00"
                        HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
@@ -118,7 +118,7 @@ Add-Type -TypeDefinition $native -Language CSharp
             <Button x:Name="StopButton" Grid.Column="2" Content="STOP"/>
             <TextBlock Grid.Column="4" Text="VOL" Margin="8,0,8,0" VerticalAlignment="Center"/>
             <Slider x:Name="Volume" Grid.Column="5" Minimum="0" Maximum="1"
-                    Value="0.70" VerticalAlignment="Center"/>
+                    Value="0.70" VerticalAlignment="Center" Focusable="False"/>
         </Grid>
 
         <TextBlock x:Name="Status" Grid.Row="3" Text="Ready. Drop a file or click Open."
@@ -141,7 +141,7 @@ $state = @{
     Fullscreen = $false
     OldState = $null
     LastVolume = 0.70
-    PendingPause = $false
+    PauseWhenOpened = $false
 }
 
 function Format-Time([TimeSpan]$time) {
@@ -163,6 +163,7 @@ function Open-Media([string]$path) {
         $Player.Source = $null
         Set-Playing $false
         $state.Loaded = $false
+        $state.PauseWhenOpened = $true
         $Timeline.Value = 0
         $Timeline.Maximum = 1
         $CurrentTime.Text = '00:00'
@@ -170,11 +171,14 @@ function Open-Media([string]$path) {
         $DropHint.Visibility = 'Visible'
         $DropHint.Text = 'LOADING...'
         $Status.Text = 'Loading: ' + [IO.Path]::GetFileName($path)
-        $state.PendingPause = $true
         $Player.Source = [Uri]$path
+        # Opening is asynchronous. Let the media pipeline reach MediaOpened;
+        # pausing here immediately can leave audio-only files stuck in Loading.
         $Player.Play()
     }
     catch {
+        $state.Loaded = $false
+        $state.PauseWhenOpened = $false
         $DropHint.Text = 'DROP MEDIA HERE'
         $Status.Text = 'Unable to open the selected file.'
     }
@@ -229,6 +233,7 @@ function Toggle-Fullscreen {
         $Controls.Visibility = 'Collapsed'
         $Status.Visibility = 'Collapsed'
         $window.WindowState = 'Maximized'
+        [Windows.Input.Mouse]::OverrideCursor = [Windows.Input.Cursors]::None
         $state.Fullscreen = $true
     } else {
         $window.WindowState = 'Normal'
@@ -239,6 +244,7 @@ function Toggle-Fullscreen {
         $Controls.Visibility = 'Visible'
         $Status.Visibility = 'Visible'
         $window.WindowState = $state.OldState
+        [Windows.Input.Mouse]::OverrideCursor = $null
         $state.Fullscreen = $false
     }
 }
@@ -267,21 +273,26 @@ $Root.Add_Drop({
 
 $Player.Add_MediaOpened({
     $state.Loaded = $true
-    if ($state.PendingPause) {
+    if ($state.PauseWhenOpened) {
         $Player.Pause()
-        $state.PendingPause = $false
+        $Player.Position = [TimeSpan]::Zero
+        $state.PauseWhenOpened = $false
     }
-    if ($Player.HasVideo) {
+    $hasVideo = $Player.NaturalVideoWidth -gt 0 -and $Player.NaturalVideoHeight -gt 0
+    $fileName = [IO.Path]::GetFileName($Player.Source.LocalPath)
+
+    if ($hasVideo) {
         $DropHint.Visibility = 'Collapsed'
     } else {
-        $DropHint.Text = [IO.Path]::GetFileName($Player.Source.LocalPath)
+        $DropHint.Text = 'AUDIO  |  ' + $fileName
         $DropHint.Visibility = 'Visible'
     }
+
     if ($Player.NaturalDuration.HasTimeSpan) {
         $Timeline.Maximum = $Player.NaturalDuration.TimeSpan.TotalSeconds
         $TotalTime.Text = Format-Time $Player.NaturalDuration.TimeSpan
     }
-    $Status.Text = 'Ready: ' + [IO.Path]::GetFileName($Player.Source.LocalPath)
+    $Status.Text = if ($hasVideo) { 'Ready: ' + $fileName } else { 'Ready (audio): ' + $fileName }
 })
 $Player.Add_MediaEnded({
     $Player.Stop()
@@ -293,7 +304,7 @@ $Player.Add_MediaEnded({
 $Player.Add_MediaFailed({
     param($sender, $e)
     $state.Loaded = $false
-    $state.PendingPause = $false
+    $state.PauseWhenOpened = $false
     Set-Playing $false
     $DropHint.Text = 'DROP MEDIA HERE'
     $DropHint.Visibility = 'Visible'
@@ -307,20 +318,22 @@ $Timeline.Add_PreviewMouseLeftButtonUp({
 })
 $VideoBorder.Add_MouseLeftButtonDown({ param($sender, $e); if ($e.ClickCount -eq 2) { Toggle-Fullscreen } })
 
-$window.Add_PreviewKeyDown({
+$keyHandler = [Windows.Input.KeyEventHandler]{
     param($sender, $e)
     switch ($e.Key) {
-        'Space'  { Toggle-Play; $e.Handled = $true }
-        'Left'   { Seek-By -5; $e.Handled = $true }
-        'Right'  { Seek-By 5; $e.Handled = $true }
-        'Up'     { $Volume.Value = [Math]::Min(1, $Volume.Value + 0.05); $e.Handled = $true }
-        'Down'   { $Volume.Value = [Math]::Max(0, $Volume.Value - 0.05); $e.Handled = $true }
-        'M'      { Toggle-Mute; $e.Handled = $true }
-        'F11'    { Toggle-Fullscreen; $e.Handled = $true }
-        'Escape' { if ($state.Fullscreen) { Toggle-Fullscreen; $e.Handled = $true } }
-        'O'      { if ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control) { $OpenButton.RaiseEvent((New-Object Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent))); $e.Handled = $true } }
+        ([Windows.Input.Key]::Space) { Toggle-Play; $e.Handled = $true }
+        ([Windows.Input.Key]::Left)  { Seek-By -5; $e.Handled = $true }
+        ([Windows.Input.Key]::Right) { Seek-By 5; $e.Handled = $true }
+        ([Windows.Input.Key]::Up)    { $Player.Volume = [Math]::Min(1.0, $Player.Volume + 0.05); $Volume.Value = $Player.Volume; $e.Handled = $true }
+        ([Windows.Input.Key]::Down)  { $Player.Volume = [Math]::Max(0.0, $Player.Volume - 0.05); $Volume.Value = $Player.Volume; $e.Handled = $true }
+        ([Windows.Input.Key]::M)     { Toggle-Mute; $e.Handled = $true }
+        ([Windows.Input.Key]::F11)   { Toggle-Fullscreen; $e.Handled = $true }
+        ([Windows.Input.Key]::Escape) { if ($state.Fullscreen) { Toggle-Fullscreen; $e.Handled = $true } }
+        ([Windows.Input.Key]::O) { if ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control) { $OpenButton.RaiseEvent((New-Object Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent))); $e.Handled = $true } }
+        { $_ -eq [Windows.Input.Key]::PageUp -or $_ -eq [Windows.Input.Key]::PageDown } { $e.Handled = $true }
     }
-})
+}
+$window.AddHandler([Windows.Input.Keyboard]::PreviewKeyDownEvent, $keyHandler, $true)
 
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromMilliseconds(250)
@@ -333,6 +346,7 @@ $timer.Add_Tick({
 $timer.Start()
 
 $window.Add_Closed({
+    [Windows.Input.Mouse]::OverrideCursor = $null
     $timer.Stop()
     $Player.Close()
     [WinPlayNative]::KeepAwake($false)
