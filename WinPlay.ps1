@@ -106,8 +106,9 @@ Add-Type -TypeDefinition $native -Language CSharp
     </Grid>
 </Window>
 '@
-$reader = New-Object System.Xml.XmlNodeReader $xaml
+$reader = [System.Xml.XmlNodeReader]::new($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
+$reader.Close()
 'Root','VideoBorder','Player','DropHint','TimelinePanel','Timeline','CurrentTime','TotalTime','Controls','OpenButton','PlayButton','StopButton','Volume','Status' | ForEach-Object {
     Set-Variable -Name $_ -Value $window.FindName($_)
 }
@@ -133,17 +134,15 @@ function Open-Media([string]$path) {
         $state.PauseWhenOpened = $true
         $Timeline.Value = 0
         $Timeline.Maximum = 1
-        $CurrentTime.Text = '00:00'
-        $TotalTime.Text = '00:00'
+        $CurrentTime.Text = $TotalTime.Text = '00:00'
         $DropHint.Visibility = 'Visible'
         $DropHint.Text = 'LOADING...'
-        $Status.Text = 'Loading: ' + [IO.Path]::GetFileName($path)
+        $Status.Text = "Loading: $([IO.Path]::GetFileName($path))"
         $Player.Source = [Uri]$path
         $Player.Play()
     }
     catch {
-        $state.Loaded = $false
-        $state.PauseWhenOpened = $false
+        $state.Loaded = $state.PauseWhenOpened = $false
         $DropHint.Text = 'DROP MEDIA HERE'
         $Status.Text = 'Unable to open the selected file.'
     }
@@ -208,11 +207,12 @@ function Toggle-Fullscreen {
         $state.Fullscreen = $false
     }
 }
+$openDialog = [Microsoft.Win32.OpenFileDialog]::new()
+$openDialog.Title = 'Open media'
+$openDialog.Filter = 'Media files|*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.m4v;*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac|All files|*.*'
+
 function Show-OpenDialog {
-    $dialog = New-Object Microsoft.Win32.OpenFileDialog
-    $dialog.Title = 'Open media'
-    $dialog.Filter = 'Media files|*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.m4v;*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac|All files|*.*'
-    if ($dialog.ShowDialog($window)) { Open-Media $dialog.FileName }
+    if ($openDialog.ShowDialog($window)) { Open-Media $openDialog.FileName }
 }
 $OpenButton.Add_Click({ Show-OpenDialog })
 $PlayButton.Add_Click({ Toggle-Play })
@@ -241,14 +241,14 @@ $Player.Add_MediaOpened({
     if ($hasVideo) {
         $DropHint.Visibility = 'Collapsed'
     } else {
-        $DropHint.Text = 'AUDIO  |  ' + $fileName
+        $DropHint.Text = "AUDIO  |  $fileName"
         $DropHint.Visibility = 'Visible'
     }
     if ($Player.NaturalDuration.HasTimeSpan) {
         $Timeline.Maximum = $Player.NaturalDuration.TimeSpan.TotalSeconds
         $TotalTime.Text = Format-Time $Player.NaturalDuration.TimeSpan
     }
-    $Status.Text = if ($hasVideo) { 'Ready: ' + $fileName } else { 'Ready (audio): ' + $fileName }
+    $Status.Text = if ($hasVideo) { "Ready: $fileName" } else { "Ready (audio): $fileName" }
 })
 $Player.Add_MediaEnded({
     $Player.Stop()
@@ -259,16 +259,16 @@ $Player.Add_MediaEnded({
 })
 $Player.Add_MediaFailed({
     param($sender, $e)
-    $state.Loaded = $false
-    $state.PauseWhenOpened = $false
+    $state.Loaded = $state.PauseWhenOpened = $false
     Set-Playing $false
     $DropHint.Text = 'DROP MEDIA HERE'
     $DropHint.Visibility = 'Visible'
-    $Status.Text = 'Windows could not play this media: ' + $e.ErrorException.Message
+    $Status.Text = "Windows could not play this media: $($e.ErrorException.Message)"
 })
 $Timeline.Add_PreviewMouseLeftButtonDown({ $state.Seeking = $true })
 $Timeline.Add_PreviewMouseLeftButtonUp({
-    if ($state.Loaded) { $Player.Position = [TimeSpan]::FromSeconds($Timeline.Value) }; $state.Seeking = $false
+    if ($state.Loaded) { $Player.Position = [TimeSpan]::FromSeconds($Timeline.Value) }
+    $state.Seeking = $false
 })
 $VideoBorder.Add_MouseLeftButtonDown({ param($sender, $e); if ($e.ClickCount -eq 2) { Toggle-Fullscreen } })
 $keyHandler = [Windows.Input.KeyEventHandler]{
@@ -301,7 +301,8 @@ $keyHandler = [Windows.Input.KeyEventHandler]{
     $e.Handled = $true
 }
 $window.AddHandler([Windows.Input.Keyboard]::PreviewKeyDownEvent, $keyHandler, $true)
-$timer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval=[TimeSpan]::FromMilliseconds(250) }
+$timer = [Windows.Threading.DispatcherTimer]::new()
+$timer.Interval = [TimeSpan]::FromMilliseconds(250)
 $timer.Add_Tick({
     if ($state.Loaded -and -not $state.Seeking) {
         $Timeline.Value = [Math]::Min($Timeline.Maximum, $Player.Position.TotalSeconds)
