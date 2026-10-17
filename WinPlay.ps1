@@ -70,7 +70,7 @@ Add-Type -TypeDefinition $native -Language CSharp
         <Border x:Name="VideoBorder" Background="Black" MinHeight="180">
             <Grid>
                 <MediaElement x:Name="Player" LoadedBehavior="Manual" UnloadedBehavior="Manual"
-                              Stretch="Uniform" ScrubbingEnabled="True" Volume="0.70"/>
+                              Stretch="Uniform" ScrubbingEnabled="True" Volume="0.30"/>
                 <TextBlock x:Name="DropHint" Text="DROP MEDIA HERE" Foreground="#F1C232"
                            FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"
                            VerticalAlignment="Center" IsHitTestVisible="False"/>
@@ -101,7 +101,7 @@ Add-Type -TypeDefinition $native -Language CSharp
             <Button x:Name="PlayButton" Grid.Column="1" Content="PLAY"/>
             <Button x:Name="StopButton" Grid.Column="2" Content="STOP"/>
             <TextBlock Grid.Column="4" Text="VOL" Margin="8,0,8,0" VerticalAlignment="Center"/>
-            <Slider x:Name="Volume" Grid.Column="5" Minimum="0" Maximum="1" Value="0.70"
+            <Slider x:Name="Volume" Grid.Column="5" Minimum="0" Maximum="1" Value="0.30"
                     VerticalAlignment="Center" Focusable="False"/>
         </Grid>
         <TextBlock x:Name="Status" Grid.Row="3" Text="Ready. Drop a file or click Open."
@@ -119,7 +119,7 @@ $reader.Close()
 }
 
 $state = @{ Loaded=$false; Playing=$false; Seeking=$false; Fullscreen=$false
-    OldState=$null; LastVolume=0.70 }
+    OldState=$null; LastVolume=0.30 }
 
 function Format-Time([TimeSpan]$time) {
     if ($time.TotalHours -ge 1) { '{0}:{1:00}:{2:00}' -f [int]$time.TotalHours, $time.Minutes, $time.Seconds }
