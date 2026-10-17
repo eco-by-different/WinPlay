@@ -208,12 +208,13 @@ function Toggle-Fullscreen {
         $state.Fullscreen = $false
     }
 }
-$OpenButton.Add_Click({
+function Show-OpenDialog {
     $dialog = New-Object Microsoft.Win32.OpenFileDialog
     $dialog.Title = 'Open media'
     $dialog.Filter = 'Media files|*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.m4v;*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac|All files|*.*'
     if ($dialog.ShowDialog($window)) { Open-Media $dialog.FileName }
-})
+}
+$OpenButton.Add_Click({ Show-OpenDialog })
 $PlayButton.Add_Click({ Toggle-Play })
 $StopButton.Add_Click({ Stop-Media })
 $Player.Volume = $Volume.Value
@@ -272,18 +273,32 @@ $Timeline.Add_PreviewMouseLeftButtonUp({
 $VideoBorder.Add_MouseLeftButtonDown({ param($sender, $e); if ($e.ClickCount -eq 2) { Toggle-Fullscreen } })
 $keyHandler = [Windows.Input.KeyEventHandler]{
     param($sender, $e)
+
     switch ($e.Key) {
-        ([Windows.Input.Key]::Space) { Toggle-Play; $e.Handled = $true }
-        ([Windows.Input.Key]::Left)  { Seek-By -5; $e.Handled = $true }
-        ([Windows.Input.Key]::Right) { Seek-By 5; $e.Handled = $true }
-        ([Windows.Input.Key]::Up)    { $Player.Volume = [Math]::Min(1.0, $Player.Volume + 0.05); $Volume.Value = $Player.Volume; $e.Handled = $true }
-        ([Windows.Input.Key]::Down)  { $Player.Volume = [Math]::Max(0.0, $Player.Volume - 0.05); $Volume.Value = $Player.Volume; $e.Handled = $true }
-        ([Windows.Input.Key]::M)     { Toggle-Mute; $e.Handled = $true }
-        ([Windows.Input.Key]::F11)   { Toggle-Fullscreen; $e.Handled = $true }
-        ([Windows.Input.Key]::Escape) { if ($state.Fullscreen) { Toggle-Fullscreen; $e.Handled = $true } }
-        ([Windows.Input.Key]::O) { if ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control) { $OpenButton.RaiseEvent((New-Object Windows.RoutedEventArgs([Windows.Controls.Button]::ClickEvent))); $e.Handled = $true } }
-        { $_ -eq [Windows.Input.Key]::PageUp -or $_ -eq [Windows.Input.Key]::PageDown } { $e.Handled = $true }
+        Space { Toggle-Play }
+        Left  { Seek-By -5 }
+        Right { Seek-By 5 }
+        Up    { $Volume.Value = [Math]::Min(1.0, $Volume.Value + 0.05) }
+        Down  { $Volume.Value = [Math]::Max(0.0, $Volume.Value - 0.05) }
+        M     { Toggle-Mute }
+        F11   { Toggle-Fullscreen }
+
+        Escape {
+            if (-not $state.Fullscreen) { return }
+            Toggle-Fullscreen
+        }
+
+        O {
+            if (-not ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control)) { return }
+            Show-OpenDialog
+        }
+
+        PageUp   { }
+        PageDown { }
+        default  { return }
     }
+
+    $e.Handled = $true
 }
 $window.AddHandler([Windows.Input.Keyboard]::PreviewKeyDownEvent, $keyHandler, $true)
 $timer = New-Object Windows.Threading.DispatcherTimer -Property @{ Interval=[TimeSpan]::FromMilliseconds(250) }
