@@ -1,6 +1,7 @@
 # WinPlay 1.0
 # Minimal Windows-only media player for Windows PowerShell 5.1
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+
 $native = @'
 using System;
 using System.Runtime.InteropServices;
@@ -12,8 +13,10 @@ public static class WinPlayNative {
     public static void KeepAwake(bool active) { SetThreadExecutionState(active ? 0x80000003u : 0x80000000u); }
 }
 '@
+
 Add-Type -TypeDefinition $native -Language CSharp
 [WinPlayNative]::HideConsole()
+
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -80,8 +83,8 @@ Add-Type -TypeDefinition $native -Language CSharp
                 <ColumnDefinition Width="48"/>
             </Grid.ColumnDefinitions>
             <TextBlock x:Name="CurrentTime" Text="00:00" VerticalAlignment="Center"/>
-            <Slider x:Name="Timeline" Grid.Column="1"
-                    Margin="8,0" IsMoveToPointEnabled="True" Focusable="False"/>
+            <Slider x:Name="Timeline" Grid.Column="1" Margin="8,0"
+                    IsMoveToPointEnabled="True" Focusable="False"/>
             <TextBlock x:Name="TotalTime" Grid.Column="2" Text="00:00"
                        HorizontalAlignment="Right" VerticalAlignment="Center"/>
         </Grid>
@@ -106,23 +109,29 @@ Add-Type -TypeDefinition $native -Language CSharp
     </Grid>
 </Window>
 '@
+
 $reader = [System.Xml.XmlNodeReader]::new($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 $reader.Close()
+
 'Root','VideoBorder','Player','DropHint','TimelinePanel','Timeline','CurrentTime','TotalTime','Controls','OpenButton','PlayButton','StopButton','Volume','Status' | ForEach-Object {
     Set-Variable -Name $_ -Value $window.FindName($_)
 }
+
 $state = @{ Loaded=$false; Playing=$false; Seeking=$false; Fullscreen=$false
-    OldState=$null; LastVolume=0.70; PauseWhenOpened=$false }
+    OldState=$null; LastVolume=0.70 }
+
 function Format-Time([TimeSpan]$time) {
     if ($time.TotalHours -ge 1) { '{0}:{1:00}:{2:00}' -f [int]$time.TotalHours, $time.Minutes, $time.Seconds }
     else { '{0:00}:{1:00}' -f [int]$time.TotalMinutes, $time.Seconds }
 }
+
 function Set-Playing([bool]$value) {
     $state.Playing = $value
     $PlayButton.Content = if ($value) { 'PAUSE' } else { 'PLAY' }
     [WinPlayNative]::KeepAwake($value)
 }
+
 function Open-Media([string]$path) {
     if (-not [IO.File]::Exists($path)) { return }
     try {
@@ -131,7 +140,6 @@ function Open-Media([string]$path) {
         $Player.Source = $null
         Set-Playing $false
         $state.Loaded = $false
-        $state.PauseWhenOpened = $true
         $Timeline.Value = 0
         $Timeline.Maximum = 1
         $CurrentTime.Text = $TotalTime.Text = '00:00'
@@ -139,14 +147,15 @@ function Open-Media([string]$path) {
         $DropHint.Text = 'LOADING...'
         $Status.Text = "Loading: $([IO.Path]::GetFileName($path))"
         $Player.Source = [Uri]$path
-        $Player.Play()
+        $Player.Stop()
     }
     catch {
-        $state.Loaded = $state.PauseWhenOpened = $false
+        $state.Loaded = $false
         $DropHint.Text = 'DROP MEDIA HERE'
         $Status.Text = 'Unable to open the selected file.'
     }
 }
+
 function Toggle-Play {
     if (-not $state.Loaded) { return }
     if ($state.Playing) {
@@ -159,6 +168,7 @@ function Toggle-Play {
         $Status.Text = 'Playing.'
     }
 }
+
 function Stop-Media {
     if (-not $state.Loaded) { return }
     $Player.Stop()
@@ -168,11 +178,13 @@ function Stop-Media {
     Set-Playing $false
     $Status.Text = 'Stopped.'
 }
+
 function Seek-By([double]$seconds) {
     if (-not $state.Loaded) { return }
     $target = [Math]::Max(0, [Math]::Min($Timeline.Maximum, $Player.Position.TotalSeconds + $seconds))
     $Player.Position = [TimeSpan]::FromSeconds($target)
 }
+
 function Toggle-Mute {
     if ($Volume.Value -gt 0) {
         $state.LastVolume = $Volume.Value
@@ -181,6 +193,7 @@ function Toggle-Mute {
         $Volume.Value = $state.LastVolume
     }
 }
+
 function Toggle-Fullscreen {
     if (-not $state.Fullscreen) {
         $state.OldState = $window.WindowState
@@ -207,6 +220,7 @@ function Toggle-Fullscreen {
         $state.Fullscreen = $false
     }
 }
+
 $openDialog = [Microsoft.Win32.OpenFileDialog]::new()
 $openDialog.Title = 'Open media'
 $openDialog.Filter = 'Media files|*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.m4v;*.mp3;*.wav;*.wma;*.m4a;*.aac;*.flac|All files|*.*'
@@ -214,28 +228,27 @@ $openDialog.Filter = 'Media files|*.mp4;*.mkv;*.avi;*.mov;*.wmv;*.m4v;*.mp3;*.wa
 function Show-OpenDialog {
     if ($openDialog.ShowDialog($window)) { Open-Media $openDialog.FileName }
 }
+
 $OpenButton.Add_Click({ Show-OpenDialog })
 $PlayButton.Add_Click({ Toggle-Play })
 $StopButton.Add_Click({ Stop-Media })
 $Player.Volume = $Volume.Value
 $Volume.Add_ValueChanged({ $Player.Volume = $Volume.Value })
+
 $Root.Add_PreviewDragOver({
     param($sender, $e)
     $e.Effects = if ($e.Data.GetDataPresent([Windows.DataFormats]::FileDrop)) { 'Copy' } else { 'None' }
     $e.Handled = $true
 })
+
 $Root.Add_Drop({
     param($sender, $e)
     $files = $e.Data.GetData([Windows.DataFormats]::FileDrop)
     if ($files -and -not [IO.Directory]::Exists($files[0])) { Open-Media $files[0] }
 })
+
 $Player.Add_MediaOpened({
     $state.Loaded = $true
-    if ($state.PauseWhenOpened) {
-        $Player.Pause()
-        $Player.Position = [TimeSpan]::Zero
-        $state.PauseWhenOpened = $false
-    }
     $hasVideo = $Player.NaturalVideoWidth -gt 0 -and $Player.NaturalVideoHeight -gt 0
     $fileName = [IO.Path]::GetFileName($Player.Source.LocalPath)
     if ($hasVideo) {
@@ -250,6 +263,7 @@ $Player.Add_MediaOpened({
     }
     $Status.Text = if ($hasVideo) { "Ready: $fileName" } else { "Ready (audio): $fileName" }
 })
+
 $Player.Add_MediaEnded({
     $Player.Stop()
     $Timeline.Value = 0
@@ -257,23 +271,29 @@ $Player.Add_MediaEnded({
     Set-Playing $false
     $Status.Text = 'Finished.'
 })
+
 $Player.Add_MediaFailed({
     param($sender, $e)
-    $state.Loaded = $state.PauseWhenOpened = $false
+    $state.Loaded = $false
     Set-Playing $false
     $DropHint.Text = 'DROP MEDIA HERE'
     $DropHint.Visibility = 'Visible'
     $Status.Text = "Windows could not play this media: $($e.ErrorException.Message)"
 })
+
 $Timeline.Add_PreviewMouseLeftButtonDown({ $state.Seeking = $true })
 $Timeline.Add_PreviewMouseLeftButtonUp({
     if ($state.Loaded) { $Player.Position = [TimeSpan]::FromSeconds($Timeline.Value) }
     $state.Seeking = $false
 })
-$VideoBorder.Add_MouseLeftButtonDown({ param($sender, $e); if ($e.ClickCount -eq 2) { Toggle-Fullscreen } })
+
+$VideoBorder.Add_MouseLeftButtonDown({
+    param($sender, $e)
+    if ($e.ClickCount -eq 2) { Toggle-Fullscreen }
+})
+
 $keyHandler = [Windows.Input.KeyEventHandler]{
     param($sender, $e)
-
     switch ($e.Key) {
         Space { Toggle-Play }
         Left  { Seek-By -5 }
@@ -282,25 +302,23 @@ $keyHandler = [Windows.Input.KeyEventHandler]{
         Down  { $Volume.Value = [Math]::Max(0.0, $Volume.Value - 0.05) }
         M     { Toggle-Mute }
         F11   { Toggle-Fullscreen }
-
         Escape {
             if (-not $state.Fullscreen) { return }
             Toggle-Fullscreen
         }
-
         O {
             if (-not ([Windows.Input.Keyboard]::Modifiers -band [Windows.Input.ModifierKeys]::Control)) { return }
             Show-OpenDialog
         }
-
         PageUp   { }
         PageDown { }
         default  { return }
     }
-
     $e.Handled = $true
 }
+
 $window.AddHandler([Windows.Input.Keyboard]::PreviewKeyDownEvent, $keyHandler, $true)
+
 $timer = [Windows.Threading.DispatcherTimer]::new()
 $timer.Interval = [TimeSpan]::FromMilliseconds(250)
 $timer.Add_Tick({
@@ -310,10 +328,12 @@ $timer.Add_Tick({
     }
 })
 $timer.Start()
+
 $window.Add_Closed({
     [Windows.Input.Mouse]::OverrideCursor = $null
     $timer.Stop()
     $Player.Close()
     [WinPlayNative]::KeepAwake($false)
 })
+
 [void]$window.ShowDialog()
