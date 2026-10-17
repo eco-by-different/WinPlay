@@ -298,8 +298,8 @@ $keyHandler = [Windows.Input.KeyEventHandler]{
         Space { Toggle-Play }
         Left  { Seek-By -5 }
         Right { Seek-By 5 }
-        Up    { $Volume.Value = [Math]::Min(1.0, $Volume.Value + 0.05) }
-        Down  { $Volume.Value = [Math]::Max(0.0, $Volume.Value - 0.05) }
+        Up    { $Volume.Value = [Math]::Min(1.0, $Volume.Value + 0.02) }
+        Down  { $Volume.Value = [Math]::Max(0.0, $Volume.Value - 0.02) }
         M     { Toggle-Mute }
         F11   { Toggle-Fullscreen }
         Escape {
