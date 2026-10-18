@@ -1,5 +1,5 @@
-![Repo size](https://img.shields.io/github/repo-size/eco-by-different/winplay)
-![Last commit](https://img.shields.io/github/last-commit/eco-by-different/winplay)
+![Repo size](https://img.shields.io/github/repo-size/eco-by-different/WinPlay)
+![Last commit](https://img.shields.io/github/last-commit/eco-by-different/WinPlay)
 
 # WinPlay
 
