@@ -163,7 +163,9 @@ function Toggle-Play {
         Set-Playing $false
         $Status.Text = 'Paused.'
     } else {
+        $position = $Player.Position
         $Player.Play()
+        $Player.Position = $position
         Set-Playing $true
         $Status.Text = 'Playing.'
     }
